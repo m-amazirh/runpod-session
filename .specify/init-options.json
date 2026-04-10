@@ -1,0 +1,9 @@
+{
+  "ai": "vibe",
+  "branch_numbering": "sequential",
+  "here": false,
+  "integration": "vibe",
+  "preset": null,
+  "script": "sh",
+  "speckit_version": "0.6.0"
+}

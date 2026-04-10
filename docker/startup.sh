@@ -1,0 +1,53 @@
+#!/bin/bash
+set -e
+
+echo "=== GPU Session Startup ==="
+echo "Model: ${MODEL_REPO}"
+echo "Filename: ${MODEL_FILENAME}"
+echo "Engine: ${ENGINE}"
+echo "Context Length: ${CTX_LEN}"
+echo "API Key: [set]"
+
+# Download model from HuggingFace
+echo "Downloading model..."
+hf download \
+    "${MODEL_REPO}" \
+    "${MODEL_FILENAME}" \
+    --cache-dir /models \
+    --local-dir /models
+
+if [ ! -f "/models/${MODEL_FILENAME}" ]; then
+    echo "ERROR: Model file not found after download"
+    exit 1
+fi
+
+echo "Model downloaded: /models/${MODEL_FILENAME}"
+
+# Start inference server based on engine
+case "${ENGINE}" in
+    "llama-cpp")
+        echo "Starting llama.cpp server..."
+        exec /usr/local/bin/llama-server \
+            -m "/models/${MODEL_FILENAME}" \
+            -c "${CTX_LEN}" \
+            -ngl 99 \
+            --host 0.0.0.0 \
+            --port 8080 \
+            --api-key "${API_KEY}" \
+            --ctx-size "${CTX_LEN}"
+        ;;
+    "vllm")
+        echo "Starting vLLM server..."
+        # Install vLLM if not present
+        pip3 install vllm --quiet
+        exec vllm serve "/models/${MODEL_FILENAME}" \
+            --host 0.0.0.0 \
+            --port 8080 \
+            --api-key "${API_KEY}" \
+            --max-model-len "${CTX_LEN}"
+        ;;
+    *)
+        echo "ERROR: Unknown engine: ${ENGINE}"
+        exit 1
+        ;;
+esac
