@@ -20,10 +20,11 @@ RUN apt-get update && apt-get install -y \
 RUN git clone --depth 1 https://github.com/ggerganov/llama.cpp.git /opt/llama.cpp && \
     cd /opt/llama.cpp && \
     mkdir build && cd build && \
-    cmake .. -DGGML_CUDA=ON -DBUILD_SHARED_LIBS=ON && \
+    cmake .. -DGGML_CUDA=ON -DCMAKE_CUDA_ARCHITECTURES="80;86;89;90" && \
     make -j$(nproc) llama-server && \
-    cp llama-server /usr/local/bin/ && \
-    cp libggml*.so libllama*.so /usr/local/lib/ && \
+    cp bin/llama-server /usr/local/bin/ && \
+    cp bin/libggml*.so bin/libllama*.so /usr/local/lib/ && \
+    echo "/usr/local/lib" >> /etc/ld.so.conf.d/llama-cpp.conf && \
     ldconfig
 
 # Create models directory
