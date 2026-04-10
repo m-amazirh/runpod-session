@@ -10,11 +10,20 @@ RUN apt-get update && apt-get install -y \
 # Install Python packages
 RUN pip3 install --no-cache-dir huggingface-hub
 
-# Download latest llama.cpp server with CUDA support
-RUN curl -L https://github.com/ggerganov/llama.cpp/releases/download/b8748/llama-b8748-bin-ubuntu-x64.tar.gz | \
-    tar xz -C /opt && \
-    ln -s /opt/llama-b8748/llama-server /usr/local/bin/llama-server && \
-    echo "/opt/llama-b8748" >> /etc/ld.so.conf.d/llama-cpp.conf && \
+# Build llama.cpp with CUDA support
+RUN apt-get update && apt-get install -y \
+    build-essential \
+    git \
+    cmake \
+    && rm -rf /var/lib/apt/lists/*
+
+RUN git clone --depth 1 https://github.com/ggerganov/llama.cpp.git /opt/llama.cpp && \
+    cd /opt/llama.cpp && \
+    mkdir build && cd build && \
+    cmake .. -DGGML_CUDA=ON -DBUILD_SHARED_LIBS=ON && \
+    make -j$(nproc) llama-server && \
+    cp llama-server /usr/local/bin/ && \
+    cp libggml*.so libllama*.so /usr/local/lib/ && \
     ldconfig
 
 # Create models directory
