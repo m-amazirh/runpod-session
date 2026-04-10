@@ -12,7 +12,10 @@ RUN pip3 install --no-cache-dir huggingface-hub
 
 # Download latest llama.cpp server with CUDA support
 RUN curl -L https://github.com/ggerganov/llama.cpp/releases/download/b8748/llama-b8748-bin-ubuntu-x64.tar.gz | \
-    tar xz -C /usr/local/bin --strip-components=1 llama-b8748/llama-server
+    tar xz -C /opt && \
+    ln -s /opt/llama-b8748/llama-server /usr/local/bin/llama-server && \
+    echo "/opt/llama-b8748" >> /etc/ld.so.conf.d/llama-cpp.conf && \
+    ldconfig
 
 # Create models directory
 RUN mkdir -p /models
