@@ -20,7 +20,7 @@ RUN apt-get update && apt-get install -y \
 RUN git clone --depth 1 https://github.com/ggerganov/llama.cpp.git /opt/llama.cpp && \
     cd /opt/llama.cpp && \
     mkdir build && cd build && \
-    cmake .. -DGGML_CUDA=ON -DCMAKE_CUDA_ARCHITECTURES="80;86;89;90" && \
+    cmake .. -DGGML_CUDA=ON -DCMAKE_CUDA_ARCHITECTURES="80;86;89;90" -DCMAKE_EXE_LINKER_FLAGS="-Wl,-rpath,/usr/local/cuda/lib64" && \
     make -j$(nproc) llama-server && \
     cp bin/llama-server /usr/local/bin/ && \
     cp bin/libggml*.so bin/libllama*.so /usr/local/lib/ && \
