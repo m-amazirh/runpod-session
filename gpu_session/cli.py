@@ -248,12 +248,13 @@ def start(
 
     click.echo("✓ Pod is running")
 
-    # Build endpoint URL
-    endpoint = f"https://{pod_id}-8080.proxy.runpod.net/v1"
+    # Build endpoint URL (llama.cpp serves at root, OpenAI API at /v1)
+    base_url = f"https://{pod_id}-8080.proxy.runpod.net"
+    endpoint = f"{base_url}/v1"
 
-    # Wait for health check
+    # Wait for health check (health is at root)
     try:
-        wait_for_health(endpoint, timeout=900, poll_interval=10)
+        wait_for_health(base_url, timeout=900, poll_interval=10)
     except TimeoutError as e:
         click.echo(f"\n[red]Error:[/red] {e}\n", err=True)
         click.echo("Destroying pod...", err=True)
