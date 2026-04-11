@@ -11,7 +11,14 @@ echo "API Key: [set]"
 # Download model from HuggingFace using direct URL
 echo "Downloading model..."
 MODEL_URL="https://huggingface.co/${MODEL_REPO}/resolve/main/${MODEL_FILENAME}"
-curl -L -o "/models/${MODEL_FILENAME}" "${MODEL_URL}"
+
+if [ -n "$HF_TOKEN" ]; then
+    echo "Using HF_TOKEN for authentication..."
+    curl -L -o "/models/${MODEL_FILENAME}" "${MODEL_URL}" \
+        -H "Authorization: Bearer ${HF_TOKEN}"
+else
+    curl -L -o "/models/${MODEL_FILENAME}" "${MODEL_URL}"
+fi
 
 if [ ! -f "/models/${MODEL_FILENAME}" ]; then
     echo "ERROR: Model file not found after download"

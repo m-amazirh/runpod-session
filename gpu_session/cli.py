@@ -139,6 +139,12 @@ def cli():
     help="Prefer specific RunPod region. Default: any region.",
 )
 @click.option(
+    "--hf-token",
+    default=None,
+    envvar="HF_TOKEN",
+    help="HuggingFace token for gated models (or set HF_TOKEN env var)",
+)
+@click.option(
     "--dry-run",
     is_flag=True,
     help="Show what would be provisioned without creating anything.",
@@ -151,6 +157,7 @@ def start(
     idle_timeout: Optional[int],
     gpu: Optional[str],
     region: Optional[str],
+    hf_token: Optional[str],
     dry_run: bool,
 ) -> None:
     """Provision a GPU, download a model, and start serving."""
@@ -222,8 +229,9 @@ def start(
         "IDLE_TIMEOUT": str(idle_timeout),
     }
 
-    # Add HF token if available
-    hf_token = None  # Don't read from env directly, pass via --hf-token option if needed
+    # Add HF token if provided
+    if hf_token:
+        env_vars["HF_TOKEN"] = hf_token
 
     # Create pod
     click.echo(f"\nCreating pod with {selected_gpu.name}...")
