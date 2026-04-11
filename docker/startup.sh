@@ -27,7 +27,7 @@ echo "Model downloaded: /models/${MODEL_FILENAME}"
 case "${ENGINE}" in
     "llama-cpp")
         echo "Starting llama.cpp server..."
-        exec /usr/local/bin/llama-server \
+        exec /app/llama-server \
             -m "/models/${MODEL_FILENAME}" \
             -c "${CTX_LEN}" \
             -ngl 99 \
