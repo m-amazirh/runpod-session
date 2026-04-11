@@ -145,6 +145,11 @@ def cli():
     help="HuggingFace token for gated models (or set HF_TOKEN env var)",
 )
 @click.option(
+    "--filename",
+    default=None,
+    help="Explicit GGUF filename (overrides auto-resolution)",
+)
+@click.option(
     "--dry-run",
     is_flag=True,
     help="Show what would be provisioned without creating anything.",
@@ -158,6 +163,7 @@ def start(
     gpu: Optional[str],
     region: Optional[str],
     hf_token: Optional[str],
+    filename: Optional[str],
     dry_run: bool,
 ) -> None:
     """Provision a GPU, download a model, and start serving."""
@@ -215,14 +221,18 @@ def start(
         return
 
     # Parse model
-    repo_id, filename = resolver.get_hf_download_args(model)
+    repo_id, resolved_filename = resolver.get_hf_download_args(model)
     repo, model_name, quant = resolver.parse_model_spec(model)
+    
+    # Use explicit filename if provided, otherwise use resolved
+    if filename:
+        resolved_filename = filename
 
     # Prepare environment variables
     env_vars = {
         "MODEL_REPO": repo_id,
         "MODEL_QUANT": quant,
-        "MODEL_FILENAME": filename,
+        "MODEL_FILENAME": resolved_filename,
         "API_KEY": api_key,
         "ENGINE": engine,
         "CTX_LEN": str(context_length),
