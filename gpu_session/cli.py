@@ -36,12 +36,23 @@ def get_client() -> RunPodClient:
         sys.exit(1)
 
 
-def check_active_session() -> Optional[Session]:
-    """Check for active session and warn if found."""
-    session = session_manager.load()
+def get_active_session(client: RunPodClient) -> Optional[dict]:
+    """Get active session from RunPod (no local state)."""
+    pods = client.list_pods()
+    # Find running gpu-session pods
+    for pod in pods:
+        if pod.get("name", "").startswith("gpu-session-"):
+            if pod.get("desiredStatus") == "RUNNING" and pod.get("runtime", {}).get("ports"):
+                return pod
+    return None
+
+
+def check_active_session(client: RunPodClient) -> Optional[dict]:
+    """Check for active session on RunPod and warn if found."""
+    session = get_active_session(client)
     if session:
         click.echo(
-            f"\n[yellow]Warning:[/yellow] Active session found (Pod ID: {session.pod_id})\n",
+            f"\n[yellow]Warning:[/yellow] Active session found (Pod ID: {session['id']})\n",
             err=True,
         )
         click.echo(
@@ -187,7 +198,7 @@ def start(
         sys.exit(1)
 
     # Check for active session
-    check_active_session()
+    check_active_session(client)
 
     # Use defaults from config if not specified
     engine = engine or config.default_engine
@@ -234,6 +245,10 @@ def start(
     # Use explicit filename if provided, otherwise use resolved
     if filename:
         resolved_filename = filename
+    
+    # Generate unique pod name from model spec
+    # Format: gpu-session-{model-name}-{quant}
+    pod_name = f"gpu-session-{model_name.lower().replace('-', '')}-{quant.lower()}"
 
     # Prepare environment variables
     env_vars = {
@@ -260,6 +275,7 @@ def start(
     
     click.echo(f"\nCreating pod with {selected_gpu.name}...")
     pod = client.create_pod(
+        name=pod_name,
         gpu_name=selected_gpu.name,
         container_image=DEFAULT_DOCKER_IMAGE,
         container_disk=estimated_disk,
@@ -293,39 +309,30 @@ def start(
         client.terminate_pod(pod_id)
         sys.exit(1)
 
-    # Create session
-    session = Session(
-        pod_id=pod_id,
-        gpu=selected_gpu.name,
-        region=region or "unknown",
-        rate_per_hour=selected_gpu.price_per_hour,
-        endpoint=endpoint,
-        api_key=api_key,
-        model=model,
-        engine=engine,
-        started_at=datetime.now(timezone.utc).isoformat().replace("+00:00", "Z"),
-    )
-
-    # Save session
-    session_manager.save(session)
+    # Extract session info from pod (no local state needed)
+    env_dict = {}
+    for env_var in pod.get("env", []):
+        if "=" in env_var:
+            key, value = env_var.split("=", 1)
+            env_dict[key] = value
 
     # Print success message
     click.echo("\n[green]✓ GPU session started[/green]")
-    click.echo(f"  Pod ID:    {session.pod_id}")
-    click.echo(f"  GPU:       {session.gpu} ({selected_gpu.vram}GB)")
-    click.echo(f"  Region:    {session.region}")
-    click.echo(f"  Rate:      ${session.rate_per_hour:.2f}/hr")
-    click.echo(f"  Endpoint:  {session.endpoint}")
-    click.echo(f"  API Key:   {session.api_key}")
-    click.echo(f"  Engine:    {session.engine}")
-    click.echo(f"  Model:     {session.model}")
+    click.echo(f"  Pod ID:    {pod_id}")
+    click.echo(f"  Pod Name:  {pod_name}")
+    click.echo(f"  GPU:       {selected_gpu.name} ({selected_gpu.vram}GB)")
+    click.echo(f"  Rate:      ${selected_gpu.price_per_hour:.2f}/hr")
+    click.echo(f"  Endpoint:  {endpoint}")
+    click.echo(f"  API Key:   {api_key}")
+    click.echo(f"  Engine:    {engine}")
+    click.echo(f"  Model:     {model}")
 
     # Vibe config snippet
-    vibe_name = session.model.split("/")[-1].lower().replace("-gguf", "").replace(":", "-")
+    vibe_name = model.split("/")[-1].lower().replace("-gguf", "").replace(":", "-")
     click.echo("\nAdd to Vibe config:")
     click.echo('  [[providers]]')
     click.echo(f'  name = "gpu-session"')
-    click.echo(f'  api_base = "{session.endpoint}"')
+    click.echo(f'  api_base = "{endpoint}"')
     click.echo('  api_key_env_var = ""')
     click.echo('  api_style = "openai"')
     click.echo('  backend = "generic"')
@@ -342,66 +349,113 @@ def start(
 @cli.command()
 def stop() -> None:
     """Destroy the active session."""
-    session = session_manager.load()
+    client = get_client()
+    pod = get_active_session(client)
 
-    if not session:
+    if not pod:
         click.echo("No active session")
         return
 
-    client = get_client()
+    pod_id = pod["id"]
+    pod_name = pod.get("name", "unknown")
+    
+    # Extract env vars
+    env_dict = {}
+    for env_var in pod.get("env", []):
+        if "=" in env_var:
+            key, value = env_var.split("=", 1)
+            env_dict[key] = value
 
-    click.echo(f"Stopping session (Pod ID: {session.pod_id})...")
-    client.terminate_pod(session.pod_id)
-
-    # Calculate duration and cost
-    duration = session.uptime_formatted
-    cost = session.estimated_cost
-
-    # Delete session state
-    session_manager.delete()
+    click.echo(f"Stopping session (Pod ID: {pod_id}, Name: {pod_name})...")
+    client.terminate_pod(pod_id)
 
     click.echo("\n[green]✓ GPU session stopped[/green]")
-    click.echo(f"  Pod ID:    {session.pod_id}")
-    click.echo(f"  Duration:  {duration}")
-    click.echo(f"  Est. cost: ${cost:.2f}")
+    click.echo(f"  Pod ID:    {pod_id}")
+    click.echo(f"  Pod Name:  {pod_name}")
+    click.echo(f"  Model:     {env_dict.get('MODEL_REPO', 'unknown')}:{env_dict.get('MODEL_QUANT', 'unknown')}")
 
 
 @cli.command()
 def status() -> None:
     """Show the current session status."""
-    session = session_manager.load()
+    client = get_client()
+    pod = get_active_session(client)
 
-    if not session:
+    if not pod:
         click.echo("No active session")
         return
 
-    client = get_client()
+    pod_id = pod["id"]
+    pod_name = pod.get("name", "unknown")
+    gpu = pod.get("machine", {}).get("gpuDisplayName", "unknown")
+    rate = pod.get("costPerHr", 0)
+    uptime = pod.get("uptimeSeconds", 0)
+    
+    # Extract env vars
+    env_dict = {}
+    for env_var in pod.get("env", []):
+        if "=" in env_var:
+            key, value = env_var.split("=", 1)
+            env_dict[key] = value
+    
+    api_key = env_dict.get("API_KEY", "****")
+    model = f"{env_dict.get('MODEL_REPO', 'unknown')}:{env_dict.get('MODEL_QUANT', 'unknown')}"
+    engine = env_dict.get("ENGINE", "llama-cpp")
+    
+    # Build endpoint from runtime ports
+    runtime = pod.get("runtime", {})
+    ports = runtime.get("ports", [])
+    if ports:
+        # Find the 8080 port
+        for port in ports:
+            if port.get("privatePort") == 8080:
+                public_port = port.get("publicPort")
+                endpoint = f"https://{pod_id}-{public_port}.proxy.runpod.net/v1"
+                base_url = f"https://{pod_id}-{public_port}.proxy.runpod.net"
+                break
+        else:
+            endpoint = "unknown"
+            base_url = "unknown"
+    else:
+        endpoint = "unknown"
+        base_url = "unknown"
 
-    # Query pod status
-    try:
-        pod = client.get_pod(session.pod_id)
-        pod_status = pod.get("podStatus", "unknown")
-    except Exception:
-        pod_status = "unknown"
-
-    # Check health (health is at root, not /v1)
+    # Check health
     try:
         with httpx.Client(timeout=10.0) as http_client:
-            # endpoint is /v1, but health is at root
-            base_url = session.endpoint.rsplit("/v1", 1)[0]
             response = http_client.get(f"{base_url}/health")
             health = "✓ OK" if response.status_code == 200 else "✗ Failed"
     except Exception:
         health = "✗ Unreachable"
 
+    # Calculate uptime
+    if uptime > 0:
+        hours = uptime // 3600
+        minutes = (uptime % 3600) // 60
+        seconds = uptime % 60
+        if hours > 0:
+            uptime_str = f"{hours}h {minutes}m {seconds}s"
+        elif minutes > 0:
+            uptime_str = f"{minutes}m {seconds}s"
+        else:
+            uptime_str = f"{seconds}s"
+    else:
+        uptime_str = "0s"
+    
+    # Calculate cost
+    cost = rate * (uptime / 3600)
+
     click.echo("\n[green]● GPU session active[/green]")
-    click.echo(f"  Pod ID:    {session.pod_id}")
-    click.echo(f"  GPU:       {session.gpu}")
-    click.echo(f"  Rate:      ${session.rate_per_hour:.2f}/hr")
-    click.echo(f"  Uptime:    {session.uptime_formatted}")
-    click.echo(f"  Est. cost: ${session.estimated_cost:.2f}")
-    click.echo(f"  Endpoint:  {session.endpoint}")
+    click.echo(f"  Pod ID:    {pod_id}")
+    click.echo(f"  Pod Name:  {pod_name}")
+    click.echo(f"  GPU:       {gpu}")
+    click.echo(f"  Rate:      ${rate:.2f}/hr")
+    click.echo(f"  Uptime:    {uptime_str}")
+    click.echo(f"  Est. cost: ${cost:.2f}")
+    click.echo(f"  Endpoint:  {endpoint}")
     click.echo(f"  Health:    {health}")
+    click.echo(f"  Model:     {model}")
+    click.echo(f"  Engine:    {engine}")
 
 
 @cli.command()

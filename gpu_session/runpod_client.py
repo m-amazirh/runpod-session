@@ -114,6 +114,7 @@ class RunPodClient:
 
     def create_pod(
         self,
+        name: str,
         gpu_name: str,
         container_image: str,
         container_disk: int = 50,
@@ -124,6 +125,7 @@ class RunPodClient:
         Create a new pod.
 
         Args:
+            name: Pod name (e.g., "gpu-session-qwen3.5-27b-q6")
             gpu_name: GPU type to use (e.g., "A6000")
             container_image: Docker image to use
             container_disk: Disk size in GB
@@ -140,7 +142,7 @@ class RunPodClient:
         ports = "8080/http"
 
         return runpod.create_pod(
-            name="gpu-session-pod",
+            name=name,
             image_name=container_image,
             gpu_type_id=gpu_name,
             cloud_type="SECURE",
@@ -153,6 +155,11 @@ class RunPodClient:
     def get_pod(self, pod_id: str) -> dict:
         """Get pod details."""
         return runpod.get_pod(pod_id)
+
+    def list_pods(self) -> list[dict]:
+        """List all pods for the account."""
+        from runpod.api import ctl_commands
+        return ctl_commands.get_pods()
 
     def terminate_pod(self, pod_id: str) -> None:
         """Terminate a pod."""
