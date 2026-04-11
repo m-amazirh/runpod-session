@@ -150,6 +150,12 @@ def cli():
     help="Explicit GGUF filename (overrides auto-resolution)",
 )
 @click.option(
+    "--disk-size",
+    default=50,
+    type=int,
+    help="Container disk size in GB (default: 50, auto-calculated for large models)",
+)
+@click.option(
     "--dry-run",
     is_flag=True,
     help="Show what would be provisioned without creating anything.",
@@ -164,6 +170,7 @@ def start(
     region: Optional[str],
     hf_token: Optional[str],
     filename: Optional[str],
+    disk_size: int,
     dry_run: bool,
 ) -> None:
     """Provision a GPU, download a model, and start serving."""
@@ -243,12 +250,19 @@ def start(
     if hf_token:
         env_vars["HF_TOKEN"] = hf_token
 
-    # Create pod
+    # Calculate disk size: model size + 20GB overhead (OS, swap, logs)
+    # Default to 50GB, but increase for large models (>20GB)
+    if disk_size < 50:
+        # Estimate: 27B models are ~15-30GB, need at least 50GB total
+        estimated_disk = max(disk_size, 50)
+    else:
+        estimated_disk = disk_size
+    
     click.echo(f"\nCreating pod with {selected_gpu.name}...")
     pod = client.create_pod(
         gpu_name=selected_gpu.name,
         container_image=DEFAULT_DOCKER_IMAGE,
-        container_disk=100,  # 28GB model + overhead
+        container_disk=estimated_disk,
         env_vars=env_vars,
     )
 
