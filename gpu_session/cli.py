@@ -197,6 +197,10 @@ def start(
         )
         sys.exit(1)
 
+    # Initialize clients
+    client = get_client()
+    resolver = ModelResolver()
+
     # Check for active session
     check_active_session(client)
 
@@ -204,10 +208,6 @@ def start(
     engine = engine or config.default_engine
     context_length = context_length or config.default_context_length
     idle_timeout = idle_timeout if idle_timeout is not None else config.default_idle_timeout
-
-    # Initialize clients
-    client = get_client()
-    resolver = ModelResolver()
 
     # List available GPUs
     click.echo("Searching for available GPUs with 48GB+ VRAM...")
