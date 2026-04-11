@@ -167,6 +167,9 @@ class RunPodClient:
         """
         Wait for pod to reach RUNNING status.
 
+        Per RunPod SDK: pod is running when desiredStatus == "RUNNING" AND
+        runtime has ports assigned. podStatus field is often None.
+
         Args:
             pod_id: Pod ID to wait for
             timeout: Maximum wait time in seconds
@@ -182,12 +185,15 @@ class RunPodClient:
 
         while time.time() - start_time < timeout:
             pod = self.get_pod(pod_id)
-            status = pod.get("podStatus", "")
+            desired_status = pod.get("desiredStatus", "")
+            runtime = pod.get("runtime", {})
+            pod_status = pod.get("podStatus", "")
 
-            if status == "RUNNING":
+            # Per RunPod SDK: check desiredStatus + runtime ports
+            if desired_status == "RUNNING" and runtime and "ports" in runtime:
                 return pod
-            elif status in ["TERMINATED", "ERROR"]:
-                raise RuntimeError(f"Pod failed to start: {status}")
+            elif pod_status in ["TERMINATED", "ERROR"]:
+                raise RuntimeError(f"Pod failed to start: {pod_status}")
 
             time.sleep(poll_interval)
 
