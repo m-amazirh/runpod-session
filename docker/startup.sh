@@ -8,13 +8,10 @@ echo "Engine: ${ENGINE}"
 echo "Context Length: ${CTX_LEN}"
 echo "API Key: [set]"
 
-# Download model from HuggingFace
+# Download model from HuggingFace using direct URL
 echo "Downloading model..."
-hf download \
-    "${MODEL_REPO}" \
-    "${MODEL_FILENAME}" \
-    --cache-dir /models \
-    --local-dir /models
+MODEL_URL="https://huggingface.co/${MODEL_REPO}/resolve/main/${MODEL_FILENAME}"
+curl -L -o "/models/${MODEL_FILENAME}" "${MODEL_URL}"
 
 if [ ! -f "/models/${MODEL_FILENAME}" ]; then
     echo "ERROR: Model file not found after download"
