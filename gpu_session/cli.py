@@ -370,10 +370,12 @@ def status() -> None:
     except Exception:
         pod_status = "unknown"
 
-    # Check health
+    # Check health (health is at root, not /v1)
     try:
         with httpx.Client(timeout=10.0) as http_client:
-            response = http_client.get(f"{session.endpoint}/health")
+            # endpoint is /v1, but health is at root
+            base_url = session.endpoint.rsplit("/v1", 1)[0]
+            response = http_client.get(f"{base_url}/health")
             health = "✓ OK" if response.status_code == 200 else "✗ Failed"
     except Exception:
         health = "✗ Unreachable"
