@@ -1,8 +1,5 @@
 FROM ghcr.io/ggml-org/llama.cpp:server-cuda
 
-# Install Python packages
-RUN pip3 install --no-cache-dir huggingface-hub
-
 # Create models directory
 RUN mkdir -p /models
 
