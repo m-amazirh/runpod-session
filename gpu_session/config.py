@@ -49,8 +49,12 @@ class Config:
 
     @property
     def default_context_length(self) -> int:
-        """Get default context length."""
-        return self.defaults.get("context_length", 131072)
+        """Get default context length.
+        
+        Qwen3.5-27B uses hybrid architecture (16/64 layers use KV cache).
+        256K fits on 48GB GPU: ~41GB total (23GB model + 16GB KV + 1GB overhead).
+        """
+        return self.defaults.get("context_length", 262144)
 
     @property
     def default_idle_timeout(self) -> int:
