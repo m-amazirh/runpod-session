@@ -38,7 +38,6 @@ case "${ENGINE}" in
             --cache-type-k q8_0 \
             --cache-type-v q8_0 \
             -ngl 99 \
-            -fa \
             --host 0.0.0.0 \
             --port 8080 \
             --api-key "${API_KEY}" \
