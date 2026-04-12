@@ -34,11 +34,16 @@ case "${ENGINE}" in
         exec /app/llama-server \
             -m "/models/${MODEL_FILENAME}" \
             -c "${CTX_LEN}" \
+            -np 1 \
+            --cache-type-k q8_0 \
+            --cache-type-v q8_0 \
             -ngl 99 \
+            -fa \
             --host 0.0.0.0 \
             --port 8080 \
             --api-key "${API_KEY}" \
-            --ctx-size "${CTX_LEN}"
+            --ctx-size "${CTX_LEN}" \
+            --metrics
         ;;
     "vllm")
         echo "Starting vLLM server..."
