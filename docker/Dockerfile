@@ -1,4 +1,4 @@
-FROM ghcr.io/ggml-org/llama.cpp:server-cuda
+FROM ghcr.io/ggml-org/llama.cpp:server-cuda12-b9174
 
 # Create models directory
 RUN mkdir -p /models
