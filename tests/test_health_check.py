@@ -1,4 +1,4 @@
-"""Tests for llama.cpp health check."""
+"""Tests for server health check."""
 
 import pytest
 from unittest.mock import patch, MagicMock
@@ -8,7 +8,7 @@ from gpu_session.cli import wait_for_health
 
 
 class TestHealthCheck:
-    """Test llama.cpp health check functionality."""
+    """Test server health check (SGLang /health endpoint)."""
 
     def test_wait_for_health_success(self):
         """Test wait_for_health succeeds when endpoint returns 200."""
@@ -27,7 +27,6 @@ class TestHealthCheck:
 
             wait_for_health("http://test-pod.proxy.runpod.net", timeout=10, poll_interval=1)
 
-            # Should succeed on first try
             assert call_count[0] == 1
 
     def test_wait_for_health_retries_on_error(self):
@@ -49,7 +48,6 @@ class TestHealthCheck:
 
             wait_for_health("http://test-pod.proxy.runpod.net", timeout=10, poll_interval=1)
 
-            # Should retry until success
             assert call_count[0] == 3
 
     def test_wait_for_health_timeout(self):
@@ -73,7 +71,7 @@ class TestHealthCheck:
             call_count[0] += 1
             response = MagicMock()
             if call_count[0] < 2:
-                response.status_code = 503  # Service unavailable
+                response.status_code = 503
             else:
                 response.status_code = 200
             return response

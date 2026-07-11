@@ -19,7 +19,6 @@ class Session:
     endpoint: str
     api_key: str
     model: str
-    engine: str
     started_at: str
 
     @property

@@ -11,35 +11,30 @@ class TestModelResolver:
         """Set up test fixtures."""
         self.resolver = ModelResolver()
 
-    def test_parse_model_spec_with_quant(self):
-        """Test parsing model spec with quantization."""
-        repo, name, quant = self.resolver.parse_model_spec(
-            "unsloth/Qwen3.5-27B-GGUF:Q8_0"
+    def test_parse_model_spec(self):
+        """Test parsing model spec returns org and repo name."""
+        org, name, _ = self.resolver.parse_model_spec(
+            "Qwen/Qwen3.6-27B-FP8"
         )
-        assert repo == "unsloth"
-        assert name == "Qwen3.5-27B-GGUF"
-        assert quant == "Q8_0"
+        assert org == "Qwen"
+        assert name == "Qwen3.6-27B-FP8"
 
-    def test_parse_model_spec_without_quant(self):
-        """Test parsing model spec without quantization."""
-        repo, name, quant = self.resolver.parse_model_spec(
-            "unsloth/Qwen3.5-27B-GGUF"
+    def test_parse_model_spec_no_slash(self):
+        """Test parsing model spec without org."""
+        org, name, _ = self.resolver.parse_model_spec(
+            "Qwen3.6-27B-FP8"
         )
-        assert repo == "unsloth"
-        assert name == "Qwen3.5-27B-GGUF"
-        assert quant == ""
+        assert org == "Qwen3.6-27B-FP8"
+        assert name == ""
 
-    def test_resolve_gguf_filename(self):
-        """Test GGUF filename resolution."""
-        filename = self.resolver.resolve_gguf_filename(
-            "unsloth", "Qwen3.5-27B-GGUF", "Q8_0"
-        )
-        assert filename == "Qwen3.5-27B-Q8_0.gguf"
+    def test_get_hf_repo_id(self):
+        """Test get_hf_repo_id returns full spec as repo ID."""
+        repo_id = self.resolver.get_hf_repo_id("Qwen/Qwen3.6-27B-FP8")
+        assert repo_id == "Qwen/Qwen3.6-27B-FP8"
 
     def test_get_hf_download_args(self):
-        """Test HuggingFace download args."""
-        repo_id, filename = self.resolver.get_hf_download_args(
-            "unsloth/Qwen3.5-27B-GGUF:Q8_0"
+        """Test HuggingFace download args return repo ID directly."""
+        repo_id, _ = self.resolver.get_hf_download_args(
+            "Qwen/Qwen3.6-27B-FP8"
         )
-        assert repo_id == "unsloth/Qwen3.5-27B-GGUF"
-        assert filename == "Qwen3.5-27B-Q8_0.gguf"
+        assert repo_id == "Qwen/Qwen3.6-27B-FP8"

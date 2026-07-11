@@ -43,16 +43,12 @@ class Config:
         return self._config.get("runpod", {})
 
     @property
-    def default_engine(self) -> str:
-        """Get default inference engine."""
-        return self.defaults.get("engine", "llama-cpp")
-
-    @property
     def default_context_length(self) -> int:
         """Get default context length.
-        
-        Qwen3.5-27B uses hybrid architecture (16/64 layers use KV cache).
-        256K fits on 48GB GPU: ~41GB total (23GB model + 16GB KV + 1GB overhead).
+
+        Qwen3.6-27B-FP8 uses hybrid Gated DeltaNet architecture
+        (16/64 layers use KV cache). 262K context with 2 concurrent
+        requests fits comfortably on 96 GB GPU with FP8 weights.
         """
         return self.defaults.get("context_length", 262144)
 

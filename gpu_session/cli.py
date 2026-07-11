@@ -14,7 +14,6 @@ from .session import Session, SessionManager, session_manager
 from .model_resolver import ModelResolver
 
 
-# Pre-built Docker image with llama.cpp and huggingface-cli
 DEFAULT_DOCKER_IMAGE = "ghcr.io/m-amazirh/runpod-session/gpu-session-runtime:latest"
 
 
@@ -105,7 +104,7 @@ def wait_for_health(
 
 @click.group()
 def cli():
-    """GPU Session CLI - Provision GPU sessions on RunPod for LLM inference."""
+    """GPU Session CLI - Provision GPU sessions on RunPod for LLM inference with SGLang."""
     pass
 
 
@@ -113,19 +112,13 @@ def cli():
 @click.option(
     "--model",
     required=True,
-    help="HuggingFace model in format repo/name:quantization (e.g., unsloth/Qwen3.5-27B-GGUF:Q8_0)",
+    help="HuggingFace model repo ID (e.g., Qwen/Qwen3.6-27B-FP8)",
 )
 @click.option(
     "--api-key",
     default=None,
     envvar="GPU_SESSION_API_KEY",
     help="API key for the inference endpoint (or set GPU_SESSION_API_KEY env var)",
-)
-@click.option(
-    "--engine",
-    default=None,
-    type=click.Choice(["llama-cpp", "vllm"]),
-    help="Inference engine (default: llama-cpp)",
 )
 @click.option(
     "--context-length",
@@ -156,9 +149,10 @@ def cli():
     help="HuggingFace token for gated models (or set HF_TOKEN env var)",
 )
 @click.option(
-    "--filename",
+    "--max-running-requests",
     default=None,
-    help="Explicit GGUF filename (overrides auto-resolution)",
+    type=int,
+    help="Maximum concurrent requests (default: 2)",
 )
 @click.option(
     "--disk-size",
@@ -174,17 +168,16 @@ def cli():
 def start(
     model: str,
     api_key: Optional[str],
-    engine: Optional[str],
     context_length: Optional[int],
     idle_timeout: Optional[int],
     gpu: Optional[str],
     region: Optional[str],
     hf_token: Optional[str],
-    filename: Optional[str],
+    max_running_requests: Optional[int],
     disk_size: int,
     dry_run: bool,
 ) -> None:
-    """Provision a GPU, download a model, and start serving."""
+    """Provision a GPU, download a model, and start serving with SGLang."""
     # Validate API key
     if not api_key:
         click.echo(
@@ -205,7 +198,6 @@ def start(
     check_active_session(client)
 
     # Use defaults from config if not specified
-    engine = engine or config.default_engine
     context_length = context_length or config.default_context_length
     idle_timeout = idle_timeout if idle_timeout is not None else config.default_idle_timeout
 
@@ -233,32 +225,27 @@ def start(
         click.echo(f"  GPU: {selected_gpu.name} ({selected_gpu.vram}GB)")
         click.echo(f"  Rate: ${selected_gpu.price_per_hour:.2f}/hr")
         click.echo(f"  Model: {model}")
-        click.echo(f"  Engine: {engine}")
         click.echo(f"  Context length: {context_length}")
+        click.echo(f"  Max running requests: {max_running_requests}")
         click.echo(f"  Docker image: {DEFAULT_DOCKER_IMAGE}")
         return
 
     # Parse model
-    repo_id, resolved_filename = resolver.get_hf_download_args(model)
-    repo, model_name, quant = resolver.parse_model_spec(model)
-    
-    # Use explicit filename if provided, otherwise use resolved
-    if filename:
-        resolved_filename = filename
-    
-    # Generate unique pod name from model spec
-    # Format: gpu-session-{model-name}-{quant}
-    pod_name = f"gpu-session-{model_name.lower().replace('-', '')}-{quant.lower()}"
+    repo_id = resolver.get_hf_repo_id(model)
+    repo, model_name, _ = resolver.parse_model_spec(model)
 
-    # Prepare environment variables
+    # Use explicit max-running-requests if provided
+    if max_running_requests is None:
+        max_running_requests = 2
+
+    pod_name = f"gpu-session-{model_name.lower()}"
+
     env_vars = {
         "MODEL_REPO": repo_id,
-        "MODEL_QUANT": quant,
-        "MODEL_FILENAME": resolved_filename,
         "API_KEY": api_key,
-        "ENGINE": engine,
         "CTX_LEN": str(context_length),
         "IDLE_TIMEOUT": str(idle_timeout),
+        "MAX_RUNNING_REQUESTS": str(max_running_requests),
     }
 
     # Add HF token if provided
@@ -296,11 +283,11 @@ def start(
 
     click.echo("✓ Pod is running")
 
-    # Build endpoint URL (llama.cpp serves at root, OpenAI API at /v1)
+    # Build endpoint URL (SGLang OpenAI-compatible API at /v1)
     base_url = f"https://{pod_id}-8080.proxy.runpod.net"
     endpoint = f"{base_url}/v1"
 
-    # Wait for health check (health is at root)
+    # Wait for health check
     try:
         wait_for_health(base_url, timeout=900, poll_interval=10)
     except TimeoutError as e:
@@ -324,16 +311,15 @@ def start(
     click.echo(f"  Rate:      ${selected_gpu.price_per_hour:.2f}/hr")
     click.echo(f"  Endpoint:  {endpoint}")
     click.echo(f"  API Key:   {api_key}")
-    click.echo(f"  Engine:    {engine}")
     click.echo(f"  Model:     {model}")
 
-    # Vibe config snippet
-    vibe_name = model.split("/")[-1].lower().replace("-gguf", "").replace(":", "-")
-    click.echo("\nAdd to Vibe config:")
+    # Vibe/OpenCode config snippet
+    vibe_name = model.split("/")[-1].lower()
+    click.echo("\nAdd to Vibe/OpenCode config:")
     click.echo('  [[providers]]')
     click.echo(f'  name = "gpu-session"')
     click.echo(f'  api_base = "{endpoint}"')
-    click.echo('  api_key_env_var = ""')
+    click.echo(f'  api_key_env_var = ""')
     click.echo('  api_style = "openai"')
     click.echo('  backend = "generic"')
     click.echo()
@@ -341,7 +327,7 @@ def start(
     click.echo(f'  name = "{vibe_name}"')
     click.echo('  provider = "gpu-session"')
     click.echo('  alias = "qwen"')
-    click.echo('  temperature = 0.2')
+    click.echo('  temperature = 0.6')
     click.echo('  input_price = 0.0')
     click.echo('  output_price = 0.0')
 
@@ -372,7 +358,7 @@ def stop() -> None:
     click.echo("\n[green]✓ GPU session stopped[/green]")
     click.echo(f"  Pod ID:    {pod_id}")
     click.echo(f"  Pod Name:  {pod_name}")
-    click.echo(f"  Model:     {env_dict.get('MODEL_REPO', 'unknown')}:{env_dict.get('MODEL_QUANT', 'unknown')}")
+    click.echo(f"  Model:     {env_dict.get('MODEL_REPO', 'unknown')}")
 
 
 @cli.command()
@@ -399,8 +385,7 @@ def status() -> None:
             env_dict[key] = value
     
     api_key = env_dict.get("API_KEY", "****")
-    model = f"{env_dict.get('MODEL_REPO', 'unknown')}:{env_dict.get('MODEL_QUANT', 'unknown')}"
-    engine = env_dict.get("ENGINE", "llama-cpp")
+    model = env_dict.get("MODEL_REPO", "unknown")
     
     # Build endpoint from runtime ports
     runtime = pod.get("runtime", {})
@@ -455,7 +440,6 @@ def status() -> None:
     click.echo(f"  Endpoint:  {endpoint}")
     click.echo(f"  Health:    {health}")
     click.echo(f"  Model:     {model}")
-    click.echo(f"  Engine:    {engine}")
 
 
 @cli.command()
